@@ -1,5 +1,5 @@
 import pandas as pd
-
+import numpy as np
 
 ticker = 'AAPL'
 def getStock(ticker):
@@ -90,8 +90,64 @@ def WillR(df, days = 14):
     df['WillR{}'.format(days)] = WillR
     return df
 
+##ATR(t)=((n-1)*ATR(t-1)+Tr(t))/n where
+##Tr(t)=Max(Abs(High-Low), Abs(Hight-Close(t-1)),
+##Abs(Low-Close(t-1));
+def ATR(df, days = 14):
+    length = len(df['Close'])
+    HL = df['High'] - df['Low']
+    HC = abs(df['High'] - df['Close'].shift(1))
+    LC = abs(df['Low'] - df['Close'].shift(1))
+    
+
+    temp_df = pd.DataFrame(index = df.index)
+
+    temp_df['HL'] = HL
+    temp_df['HC'] = HC
+    temp_df['LC'] = LC
+    temp_df['TR'] = temp_df.max(axis = 1)
+    temp_df['High'] = df['High']
+    temp_df['Low'] = df['Low']
+    temp_df['Close'] = df['Close']
+    temp_df['ATR1'] = temp_df['TR'].rolling(window = days).mean()
+    temp_df['ATR'] = pd.Series(np.zeros(length), index = temp_df.index)
+    temp_df['ATR'].iloc[days-1:days*2-2]=temp_df['ATR1'].iloc[days-1:days*2-2]
+    ATR13 = temp_df['ATR'].iloc[days-1:days*2-2].values
+    TR14 = temp_df['TR'][days*2-2:].values
+    ATR = pd.Series(ATRCal(ATR13,TR14)).values
+    temp_df['ATR'] = ATR
+
+    df['ATR{}'.format(days)] = temp_df['ATR']
+
+    return df
+
+def ATRCal(ATR13, TR14):
+    ret = list(ATR13)
+    for i in range(0, len(TR14)):
+        newATR = (sum(ret[i:i+13])+TR14[i])/14
+        ret.append(newATR)
+    for i in range(0,13):
+        ret.insert(0,0)
+    return ret
+
+##TR(t)/TR(t-1) where
+##TR(t)=EMA(EMA(EMA(Price(t)))) over n days
+##period
+##Triple
+##Exponential
+##Moving
+##Average
+def TEMA(df, days):
+    EMA(df, days)
+    temp_df = pd.DataFrame(index = df.index)
+    temp_df['DoubleEMA'] = df['EMA{}'.format(days)].ewm(span=days).mean()
+    temp_df['TripleEMA'] = temp_df['DoubleEMA'].ewm(span=days).mean()
+    temp_df['TripleEMA'] = 3*df['EMA{}'.format(days)]-3*temp_df['DoubleEMA']+temp_df['TripleEMA']
+    df['TripleEMA{}'.format(days)] = temp_df['TripleEMA']
+    return df
+
 df = getStock(ticker)
-WillR(df,5)
+df = TEMA(df,10)
 print(df)
 #print(df[['Adj Close','CCI20']])
 
