@@ -1,8 +1,12 @@
 import pandas as pd
 import numpy as np
 import datetime as dt
+from collections import Counter
 
 ticker = 'AAPL'
+SP500 = 'SP500'
+NASDAQ = 'NASDAQ'
+
 def getStock(ticker):
     df = pd.read_csv(
             '.\stock_dfs\{}.csv'.format(ticker),            
@@ -25,15 +29,15 @@ def EMA(df, days):
 def MACD(df, fastMA_Period = 12, slowMA_Period = 26, signal_Period = 9):
     EMA(df, fastMA_Period)
     EMA(df, slowMA_Period)
-    df['MACD'] = df['EMA{}'.format(fastMA_Period)] - df['EMA{}'.format(slowMA_Period)]
-    df['MACD_signal'] = pd.ewma(df['MACD'], span=signal_Period)
+    df['MACD{}_{}_{}'.format(fastMA_Period,slowMA_Period,signal_Period)] = df['EMA{}'.format(fastMA_Period)] - df['EMA{}'.format(slowMA_Period)]
+    df['MACD_signal{}_{}_{}'.format(fastMA_Period,slowMA_Period,signal_Period)] = df['MACD{}_{}_{}'.format(fastMA_Period,slowMA_Period,signal_Period)].ewm(span = signal_Period).mean()
     return df
 
 def Bollinger_bands(df, days = 14):
     SMA(df, days)
     std = df['Adj Close'].rolling(window = days, min_periods = 0).std()
-    df['Upper_band'] = df['SMA{}'.format(days)] + 2*std
-    df['Lower band'] = df['SMA{}'.format(days)] - 2*std
+    df['Upper_band{}'.format(days)] = df['SMA{}'.format(days)] + 2*std
+    df['Lower band{}'.format(days)] = df['SMA{}'.format(days)] - 2*std
     return df
 
 ##Avg(PriceUp)/(Avg(PriceUP)+Avg(PriceDown)*100
@@ -72,6 +76,7 @@ def Momentum(df, days):
 def RateOfChange(df, days):
     df['RateOfChange{}'.format(days)] = (df['Adj Close']/df['Adj Close'].shift(days))*100
     df.fillna(100, inplace = True)
+    return df
 
 
 ##CCI = (Typical Price  -  n-period SMA of TP) / (Constant x Mean Deviation)
@@ -92,11 +97,11 @@ def CCI(df, days = 20):
 ##Lowest Low = lowest low for the look-back period
 ##Highest High = highest high for the look-back period
 ##%R is multiplied by -100 correct the inversion and move the decimal.
-def WillR(df, days = 14):
+def WILLR(df, days = 14):
     HH = df['High'].rolling(window = days, min_periods = 0).max()
     LL = df['Low'].rolling(window = days, min_periods = 0).min()
     WillR = (HH-df['Close'])/(HH-LL)*(-100)
-    df['WillR{}'.format(days)] = WillR
+    df['WILLR{}'.format(days)] = WillR
     return df
 
 ##ATR(t)=((n-1)*ATR(t-1)+Tr(t))/n where
@@ -269,7 +274,7 @@ def ADX_test(df, days = 14):
     df['NDI{}'.format(days)] = NDI
     df['ADX{}'.format(days)] = ADX
     
-    return df
+    return temp_df
 
 def ADX(df, days = 14):
     HL = df['High'] - df['Low']
@@ -312,9 +317,89 @@ def ADX(df, days = 14):
     
     return df
 
-df = getStock(ticker)
-df = ADX(df)
-#df.to_csv('adx_v3.csv')
-#df = OBV(df, dt.date(2017,1,4))
-print(df)
-#print(df[['Adj Close','CCI20']])
+def priceUpDown(df, days = 1):
+    close = df['Adj Close']
+    if days == 1:
+        diff = (close.shift(-1)-close)        
+    else:
+        diff = close.rolling(window = days).mean().shift(-days) - close
+
+    UpDown = diff.map(lambda x: 1 if x>0 else -1)    
+    df['diff'] = diff
+    df['UpDown{}'.format(days)] = UpDown
+    return df
+
+def buildFeatures(ticker):
+    df = getStock(ticker)
+    df = SMA(df,3)
+    df = EMA(df,6)
+    df = EMA(df,12)
+    df = MACD(df)
+    df = Bollinger_bands(df)
+    df = RSI(df,6)
+    df = RSI(df,12)
+    df = Momentum(df,1)
+    df = Momentum(df,3)
+    df = RateOfChange(df,3)
+    df = RateOfChange(df,12)
+    df = CCI(df,12)
+    df = CCI(df,20)
+    df = WILLR(df)
+    df = ATR(df)
+    df = TEMA(df,6)
+    df = OBV(df,dt.date(1999,12,31))
+    df = MFI(df)
+    df = ADX(df,14)
+    df = ADX(df,20)
+    df = priceUpDown(df,1)
+    df = priceUpDown(df,3)
+    df = priceUpDown(df,5)
+    df = priceUpDown(df,7)
+    df = priceUpDown(df,10)
+    return df
+
+
+##def renameColumns():
+##    df_SP500 = pd.read_csv('Stock_Features_SP500.csv',
+##                           index_col = 0,
+##                           parse_dates = True)
+##    df_SP500 = df_SP500.add_suffix('_SP500')
+##    df_SP500.to_csv('Stock_Features_SP500.csv')
+##    df_SP500 = pd.read_csv('Stock_Features_NASDAQ.csv',
+##                           index_col = 0,
+##                           parse_dates = True)
+##    df_SP500 = df_SP500.add_suffix('_NASDAQ')
+##    df_SP500.to_csv('Stock_Features_NASDAQ.csv')
+
+def mergeDateFrames():
+    df = pd.read_csv('Stock_Features_AAPL.csv',
+                           index_col = 0,
+                           parse_dates = True)
+
+    df_NASDAQ = pd.read_csv('Stock_Features_NASDAQ.csv',
+                           index_col = 0,
+                           parse_dates = True)
+
+    df_SP500 = pd.read_csv('Stock_Features_SP500.csv',
+                           index_col = 0,
+                           parse_dates = True)
+    df = df.join(df_SP500, how = 'outer')
+    df = df.join(df_NASDAQ, how = 'outer')
+
+    df.to_csv('Stock_Features_APPL_SP500_NASDAQ.csv')
+    
+
+mergeDateFrames()
+##renameColumns()
+
+##df = buildFeatures(NASDAQ)
+##df.to_csv('Stock_Features_{}.csv'.format(NASDAQ))
+
+
+##df = getStock(ticker)
+##df = RateOfChange(df,3)
+##df.to_csv('rateOfChange.csv')
+###df = OBV(df, dt.date(2017,1,4))
+##print(df)
+##print(Counter(df['UpDown7']))
+###print(df[['Adj Close','CCI20']])
