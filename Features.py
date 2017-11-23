@@ -2,12 +2,18 @@ import pandas as pd
 import numpy as np
 import datetime as dt
 from collections import Counter
+import os
+import pickle
 
 ticker = 'AAPL'
 SP500 = 'SP500'
 NASDAQ = 'NASDAQ'
 
 def getStock(ticker):
+    path = '.\stock_dfs\{}.csv'.format(ticker)
+    if not os.path.exists(path):
+        print('{} not exist'.format(ticker))
+        return None
     df = pd.read_csv(
             '.\stock_dfs\{}.csv'.format(ticker),            
             index_col = 0,
@@ -325,37 +331,39 @@ def priceUpDown(df, days = 1):
         diff = close.rolling(window = days).mean().shift(-days) - close
 
     UpDown = diff.map(lambda x: 1 if x>0 else -1)    
-    df['diff'] = diff
     df['UpDown{}'.format(days)] = UpDown
     return df
 
 def buildFeatures(ticker):
     df = getStock(ticker)
-    df = SMA(df,3)
-    df = EMA(df,6)
-    df = EMA(df,12)
-    df = MACD(df)
-    df = Bollinger_bands(df)
-    df = RSI(df,6)
-    df = RSI(df,12)
-    df = Momentum(df,1)
-    df = Momentum(df,3)
-    df = RateOfChange(df,3)
-    df = RateOfChange(df,12)
-    df = CCI(df,12)
-    df = CCI(df,20)
-    df = WILLR(df)
-    df = ATR(df)
-    df = TEMA(df,6)
-    df = OBV(df,dt.date(1999,12,31))
-    df = MFI(df)
-    df = ADX(df,14)
-    df = ADX(df,20)
-    df = priceUpDown(df,1)
-    df = priceUpDown(df,3)
-    df = priceUpDown(df,5)
-    df = priceUpDown(df,7)
-    df = priceUpDown(df,10)
+    if df is not None:
+        df = SMA(df,3)
+        df = EMA(df,6)
+        df = EMA(df,12)
+        df = MACD(df)
+        df = Bollinger_bands(df)
+        df = RSI(df,6)
+        df = RSI(df,12)
+        df = Momentum(df,1)
+        df = Momentum(df,3)
+        df = RateOfChange(df,3)
+        df = RateOfChange(df,12)
+        df = CCI(df,12)
+        df = CCI(df,20)
+        df = WILLR(df)
+        df = ATR(df)
+        df = TEMA(df,6)
+        df = OBV(df,dt.date(1999,12,31))
+        df = MFI(df)
+        df = ADX(df,14)
+        df = ADX(df,20)
+        df = priceUpDown(df,1)
+        df = priceUpDown(df,3)
+        df = priceUpDown(df,5)
+        df = priceUpDown(df,7)
+        df = priceUpDown(df,10)
+        df = priceUpDown(df,15)
+        df = priceUpDown(df, 30)
     return df
 
 
@@ -371,25 +379,53 @@ def buildFeatures(ticker):
 ##    df_SP500 = df_SP500.add_suffix('_NASDAQ')
 ##    df_SP500.to_csv('Stock_Features_NASDAQ.csv')
 
-def mergeDateFrames():
-    df = pd.read_csv('Stock_Features_AAPL.csv',
-                           index_col = 0,
-                           parse_dates = True)
-
-    df_NASDAQ = pd.read_csv('Stock_Features_NASDAQ.csv',
-                           index_col = 0,
-                           parse_dates = True)
-
-    df_SP500 = pd.read_csv('Stock_Features_SP500.csv',
-                           index_col = 0,
-                           parse_dates = True)
-    df = df.join(df_SP500, how = 'outer')
-    df = df.join(df_NASDAQ, how = 'outer')
-
-    df.to_csv('Stock_Features_APPL_SP500_NASDAQ.csv')
+##def mergeDateFrames():
+##    df = pd.read_csv('Stock_Features_AAPL.csv',
+##                           index_col = 0,
+##                           parse_dates = True)
+##
+##    df_NASDAQ = pd.read_csv('Stock_Features_NASDAQ.csv',
+##                           index_col = 0,
+##                           parse_dates = True)
+##
+##    df_SP500 = pd.read_csv('Stock_Features_SP500.csv',
+##                           index_col = 0,
+##                           parse_dates = True)
+##    df = df.join(df_SP500, how = 'outer')
+##    df = df.join(df_NASDAQ, how = 'outer')
+##
+##    df.to_csv('Stock_Features_APPL_SP500_NASDAQ.csv')
     
+def generateIndicatorDf(isIndex = False):
+    path = 'stockIndicator_dfs\{}.csv'
+    if isIndex == True:
+        df1 = buildFeatures('SP500')
+        df2 = buildFeatures('NASDAQ')
+        df1.to_csv(path.format('SP500'))
+        df2.to_csv(path.format('NASDAQ'))
 
-mergeDateFrames()
+    else:
+        with open("sp500tickers.pickle","rb") as f:
+            tickers = pickle.load(f)
+
+        print(tickers)
+        for ticker in tickers:
+            if os.path.exists(path.format(ticker)):
+                continue
+            else:
+                print(ticker)
+                try:
+                    df = buildFeatures(ticker)
+                except Exception as e:
+                    print(e)
+                    print('Ticker{} generate failed'.format(ticker))
+                if df is not None:
+                    df.to_csv(path.format(ticker))
+
+
+generateIndicatorDf(True)
+    
+##mergeDateFrames()
 ##renameColumns()
 
 ##df = buildFeatures(NASDAQ)
