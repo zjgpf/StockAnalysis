@@ -5,7 +5,7 @@ from sklearn.preprocessing import MinMaxScaler
 from sklearn.model_selection import GridSearchCV
 from sklearn.metrics import make_scorer
 from sklearn.ensemble import AdaBoostClassifier
-from sklearn.metrics import fbeta_score, accuracy_score
+from sklearn.metrics import fbeta_score, accuracy_score, f1_score
 from sklearn.linear_model import LinearRegression
 from sklearn import neighbors
 from sklearn.neural_network import MLPClassifier
@@ -13,7 +13,7 @@ from sklearn import svm
 import os
 import pickle
 from sklearn.model_selection import TimeSeriesSplit
-import Visualiztion as vs
+import Visualization as vs
 
 fullList = ['Open', 'High', 'Low', 'Close', 'Adj Close', 'Volume', 'SMA3', 'EMA6', 'EMA12', 'EMA26', 'MACD12_26_9',
             'MACD_signal12_26_9', 'SMA14', 'Upper_band14', 'Lower band14', 'RSI6EMA', 'RSI12EMA', 'Momentum1', 'Momentum3',
@@ -138,11 +138,12 @@ def SVM(X_train, y_train, isGridSearch = False, parm = [
   {'C': [1, 10, 100, 1000], 'kernel': ['linear']},
   {'C': [1, 10, 100, 1000], 'gamma': [0.001, 0.0001], 'kernel': ['rbf']},
  ]):
-    clf = svm.SVC(gamma = 0.001)
+    clf = svm.SVC()
     if isGridSearch:
         my_cv = TimeSeriesSplit(n_splits=5).split(X_train)
         parameters = parm
-        scorer = make_scorer(fbeta_score, beta = 1)
+        #scorer = make_scorer(fbeta_score, beta = 1) pos_label = -1
+        scorer = make_scorer(f1_score, pos_label = -1)
         grid_obj = GridSearchCV(clf, parameters, scoring = scorer, cv = my_cv)
         grid_fit = grid_obj.fit(X_train, y_train)
         #print(grid_fit.best_params_ )
@@ -169,26 +170,34 @@ def NN(X_train, y_train):
 
 def ml(classifier, ticker,
        X_train, y_train,
-       X_test, y_test):
-    [clf_Name, clf] = classifier(X_train, y_train, isGridSearch = False)
+       X_test, y_test, isGridSearch = True):
+    [clf_Name, clf] = classifier(X_train, y_train, isGridSearch = isGridSearch)
 
     predictions = clf.predict(X_test)
-    
+    predictions = predictions.tolist()
+    print(predictions)
+    print(y_test)
     accuracy = accuracy_score(y_test, predictions)
-    fscore = fbeta_score(y_test, predictions, beta = 1)
+    #fscore = fbeta_score(y_test, predictions, beta = 1)
+    fscore = f1_score(y_test, predictions, average = 'binary')
     
     return [ticker, clf_Name, accuracy, fscore]
     
-def plotpriceLabel():
-    for ticker in companyList:
-        X_train, y_train, X_test, y_test = getXy(ticker, isDrop = True)
+def plotPriceLabel():
+
+    ticker = 'MMM'
+    X_train, y_train, X_test, y_test = getXy(ticker, isDrop = True, predict_period = 15)
+
+    [clf_Name, clf] = SVM(X_train, y_train, isGridSearch = True)
+    predictions = clf.predict(X_test)
+    df = getStock(ticker)
+    startTestDate = dt.date(2016,1,1)
+    endTestDate = dt.date(2016,12,31)
     
-        print('stock: {} accuracy:{} f1score: {}'.format(ticker, accuracy, fscore))
-        l1.append([ticker, clf, accuracy, fscore])
+    df = df.ix[startTestDate:endTestDate]
+    df = df[['Adj Close']]
+    df['Prediction'] = predictions
 
-    performance_df = pd.DataFrame(l1, columns = ['Ticker', 'Classify', 'Accuracy', 'Fscore'])
-
-    print(performance_df)
     vs.closeLabel(df)
 
     
@@ -234,6 +243,19 @@ def run():
 
     print(performance_df)
 
+def run1():
+    l1 = []
+    for ticker in companyList:
+        X_train, y_train, X_test, y_test = getXy(ticker, isDrop = True, predict_period = 10)
+        y_test = y_test.tolist()
+        [ticker, clf, accuracy, fscore] = ml(SVM, ticker, X_train, y_train, X_test, y_test, isGridSearch = False)
+        print('stock: {} accuracy:{} f1score: {}'.format(ticker, accuracy, fscore))
+        l1.append([ticker, clf, accuracy, fscore])
+
+    performance_df = pd.DataFrame(l1, columns = ['Ticker', 'Classify', 'Accuracy', 'Fscore'])
+
+    print(performance_df)
+
 def timeSeries(ticker = 'AAPL'):
     X_train, y_train, X_test, y_test = getXy(ticker, isDrop = True)
 ##    X_train1 = X_train.reset_index()
@@ -259,6 +281,7 @@ def timeSeries(ticker = 'AAPL'):
 
     
 #timeSeries()   
-run()
+plotPriceLabel()
 #benchmark(companyList)
+#run()
 
